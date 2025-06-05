@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🥛 Milk Intake Tracker - Supabase</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-4">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8">🥛 Milk Intake Tracker</h1>
+        
+        <!-- Connection Status -->
+        <div class="bg-white rounded-lg p-4 mb-6 text-center">
+            <div id="status" class="text-lg">
+                <span class="inline-block w-3 h-3 rounded-full bg-yellow-500 mr-2"></span>
+                Connecting to Supabase...
+            </div>
+        </div>
+
+        <!-- Add Entry Form -->
+        <div class="bg-white rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Add New Entry</h2>
+            <form id="entryForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input type="date" id="date" required class="p-2 border rounded">
+                <input type="number" id="quantity" step="0.1" min="0" placeholder="Liters" required class="p-2 border rounded">
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+                    Add Entry
+                </button>
+            </form>
+        </div>
+
+        <!-- Entries List -->
+        <div class="bg-white rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Entries</h2>
+            <div id="entries" class="space-y-2">
+                <p class="text-gray-500 text-center">Loading entries...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 🔧 REPLACE WITH YOUR SUPABASE CONFIG
+        const supabaseUrl = 'YOUR_SUPABASE_URL_HERE'
+        const supabaseKey = 'YOUR_SUPABASE_ANON_KEY_HERE'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        // DOM elements
+        const statusEl = document.getElementById('status');
+        const entriesEl = document.getElementById('entries');
+        const formEl = document.getElementById('entryForm');
+
+        // Update status
+        function updateStatus(message, color) {
+            statusEl.innerHTML = `
+                <span class="inline-block w-3 h-3 rounded-full bg-${color}-500 mr-2"></span>
+                ${message}
+            `;
+        }
+
+        // Load and display entries
+        async function loadEntries() {
+            try {
+                const { data, error } = await supabase
+                    .from('milk_entries')
+                    .select('*')
+                    .order('date', { ascending: false });
+
+                if (error) throw error;
+
+                updateStatus('Connected to Supabase ✅', 'green');
+
+                if (data.length === 0) {
+                    entriesEl.innerHTML = '<p class="text-gray-500 text-center">No entries yet. Add your first one!</p>';
+                    return;
+                }
+
+                entriesEl.innerHTML = data.map(entry => `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <div>
+                            <span class="font-medium">${entry.date}</span>
+                            <span class="ml-4 text-blue-600">${entry.quantity}L</span>
+                        </div>
+                        <button onclick="deleteEntry(${entry.id})" 
+                                class="text-red-500 hover:text-red-700">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                updateStatus('Connection Error ❌', 'red');
+                console.error('Supabase error:', error);
+            }
+        }
+
+        // Add new entry
+        formEl.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const date = document.getElementById('date').value;
+            const quantity = parseFloat(document.getElementById('quantity').value);
+            
+            try {
+                const { error } = await supabase
+                    .from('milk_entries')
+                    .insert([{ date: date, quantity: quantity }]);
+                
+                if (error) throw error;
+                
+                // Reset form and reload entries
+                document.getElementById('quantity').value = '';
+                document.getElementById('date').valueAsDate = new Date();
+                loadEntries();
+                
+            } catch (error) {
+                alert('Error adding entry: ' + error.message);
+            }
+        });
+
+        // Delete entry
+        window.deleteEntry = async (id) => {
+            if (confirm('Delete this entry?')) {
+                try {
+                    const { error } = await supabase
+                        .from('milk_entries')
+                        .delete()
+                        .eq('id', id);
+                    
+                    if (error) throw error;
+                    loadEntries();
+                    
+                } catch (error) {
+                    alert('Error deleting entry: ' + error.message);
+                }
+            }
+        };
+
+        // Set up real-time subscription
+        supabase
+            .channel('milk_entries')
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'milk_entries' 
+            }, () => {
+                loadEntries(); // Reload when data changes
+            })
+            .subscribe();
+
+        // Initialize
+        document.getElementById('date').valueAsDate = new Date();
+        loadEntries();
+    </script>
+</body>
+</html>

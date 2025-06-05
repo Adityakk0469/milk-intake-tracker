@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🥛 Milk Intake Tracker - Firebase</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-4">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8">🥛 Milk Intake Tracker</h1>
+        
+        <!-- Connection Status -->
+        <div class="bg-white rounded-lg p-4 mb-6 text-center">
+            <div id="status" class="text-lg">
+                <span class="inline-block w-3 h-3 rounded-full bg-yellow-500 mr-2"></span>
+                Connecting to Firebase...
+            </div>
+        </div>
+
+        <!-- Add Entry Form -->
+        <div class="bg-white rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Add New Entry</h2>
+            <form id="entryForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input type="date" id="date" required class="p-2 border rounded">
+                <input type="number" id="quantity" step="0.1" min="0" placeholder="Liters" required class="p-2 border rounded">
+                <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+                    Add Entry
+                </button>
+            </form>
+        </div>
+
+        <!-- Entries List -->
+        <div class="bg-white rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Entries</h2>
+            <div id="entries" class="space-y-2">
+                <p class="text-gray-500 text-center">Loading entries...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 🔥 REPLACE THIS WITH YOUR FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY_HERE",
+            authDomain: "YOUR_PROJECT.firebaseapp.com", 
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot,
+            deleteDoc,
+            doc,
+            orderBy,
+            query 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        // DOM elements
+        const statusEl = document.getElementById('status');
+        const entriesEl = document.getElementById('entries');
+        const formEl = document.getElementById('entryForm');
+
+        // Update status
+        function updateStatus(message, color) {
+            statusEl.innerHTML = `
+                <span class="inline-block w-3 h-3 rounded-full bg-${color}-500 mr-2"></span>
+                ${message}
+            `;
+        }
+
+        // Listen for real-time updates
+        const q = query(collection(db, 'milkEntries'), orderBy('date', 'desc'));
+        onSnapshot(q, (snapshot) => {
+            updateStatus('Connected to Firebase ✅', 'green');
+            
+            if (snapshot.empty) {
+                entriesEl.innerHTML = '<p class="text-gray-500 text-center">No entries yet. Add your first one!</p>';
+                return;
+            }
+
+            entriesEl.innerHTML = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <div>
+                            <span class="font-medium">${data.date}</span>
+                            <span class="ml-4 text-blue-600">${data.quantity}L</span>
+                        </div>
+                        <button onclick="deleteEntry('${doc.id}')" 
+                                class="text-red-500 hover:text-red-700">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }, (error) => {
+            updateStatus('Connection Error ❌', 'red');
+            console.error('Firebase error:', error);
+        });
+
+        // Add new entry
+        formEl.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const date = document.getElementById('date').value;
+            const quantity = parseFloat(document.getElementById('quantity').value);
+            
+            try {
+                await addDoc(collection(db, 'milkEntries'), {
+                    date: date,
+                    quantity: quantity,
+                    timestamp: new Date()
+                });
+                
+                // Reset form
+                document.getElementById('quantity').value = '';
+                document.getElementById('date').valueAsDate = new Date();
+                
+            } catch (error) {
+                alert('Error adding entry: ' + error.message);
+            }
+        });
+
+        // Delete entry
+        window.deleteEntry = async (id) => {
+            if (confirm('Delete this entry?')) {
+                try {
+                    await deleteDoc(doc(db, 'milkEntries', id));
+                } catch (error) {
+                    alert('Error deleting entry: ' + error.message);
+                }
+            }
+        };
+
+        // Set today's date
+        document.getElementById('date').valueAsDate = new Date();
+    </script>
+</body>
+</html>
